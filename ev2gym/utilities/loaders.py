@@ -1,6 +1,8 @@
 '''
 This file contains the loaders for the EV City environment.
 '''
+import os
+from dotenv import load_dotenv
 
 import numpy as np
 import pandas as pd
@@ -16,6 +18,7 @@ from ev2gym.models.transformer import Transformer
 
 from ev2gym.utilities.utils import EV_spawner, generate_power_setpoints, EV_spawner_GF
 
+load_dotenv()
 
 def load_ev_spawn_scenarios(env) -> None:
     '''Loads the EV spawn scenarios of the simulation'''
@@ -25,6 +28,12 @@ def load_ev_spawn_scenarios(env) -> None:
         
         if "ev_specs_file" in env.config:
             ev_specs_file = env.config['ev_specs_file']
+            
+            # Handle paths relative to project root
+            if ev_specs_file.startswith('${PROJECT_ROOT}'):
+                project_root = os.getenv('PROJECT_ROOT')
+                if project_root:
+                    ev_specs_file = ev_specs_file.replace('${PROJECT_ROOT}', project_root)
         else:            
             ev_specs_file = pkg_resources.resource_filename(
                 'ev2gym', 'data/ev_specs.json')
