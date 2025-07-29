@@ -166,14 +166,20 @@ class EV2Gym(gym.Env):
         self.sim_starting_date = self.sim_date
 
         # Read the config.charging_network_topology json file and read the topology
+        charging_network_topology = self.config['charging_network_topology']
         try:
-            with open(self.config['charging_network_topology']) as json_file:
+            # Handle paths relative to project root
+            if charging_network_topology.startswith('${PROJECT_ROOT}'):
+                project_root = os.getenv('PROJECT_ROOT')
+                if project_root:
+                    charging_network_topology = charging_network_topology.replace('${PROJECT_ROOT}', project_root)
+            with open(charging_network_topology) as json_file:
                 self.charging_network_topology = json.load(json_file)
 
         except FileNotFoundError:
-            if not self.config['charging_network_topology'] == 'None':
+            if not charging_network_topology == 'None':
                 print(
-                    f'Did not find file {self.config["charging_network_topology"]}')
+                    f'Did not find file {charging_network_topology}')
             self.charging_network_topology = None
 
         self.sim_name = extra_sim_name + \

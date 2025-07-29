@@ -1,4 +1,7 @@
+from dotenv import load_dotenv
 from gymnasium.envs.registration import register
+
+load_dotenv()
 
 register(
     id='EV2Gym-v1',

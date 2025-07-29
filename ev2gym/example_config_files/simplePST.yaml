@@ -42,7 +42,7 @@ number_of_transformers: 1
 number_of_ports_per_cs: 1
 # Provide path if you want to load a specific charging topology,
 # else write None for a randomized one with the above parameters
-charging_network_topology: None #./config_files/charging_topology_10.json
+charging_network_topology: ${PROJECT_ROOT}/packages/ev2gym_lib/ev2gym/example_config_files/charging_topology_10.json
 
 ##############################################################################
 # Power Setpoints Settings
