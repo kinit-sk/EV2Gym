@@ -161,7 +161,7 @@ def print_statistics(env) -> None:
         f'  - Total energy charged: {total_energy_charged:.1f} | discharged: {total_energy_discharged:.1f} kWh')
     print(
         f'  - Power Tracking squared error: {tracking_error:.2f}, Power Violation: {power_tracker_violation:.2f} kW')
-    print(f' - Actual Energy Tracking error: {energy_tracking_error:.2f} kW')
+    print(f'  - Actual Energy Tracking error: {energy_tracking_error:.2f} kW')
     print(
         f'  - Mean energy user satisfaction: {energy_user_satisfaction:.2f} % | Min: {min_energy_user_satisfaction:.2f} %')
     print(
