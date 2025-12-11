@@ -180,7 +180,10 @@ class EV2Gym(gym.Env):
             if charging_network_topology.startswith('${PROJECT_ROOT}'):
                 project_root = os.getenv('PROJECT_ROOT')
                 if project_root:
-                    charging_network_topology = charging_network_topology.replace('${PROJECT_ROOT}', project_root)
+                    charging_network_topology = charging_network_topology.replace(
+                        '${PROJECT_ROOT}', 
+                        project_root
+                    )
             with open(charging_network_topology) as json_file:
                 self.charging_network_topology = json.load(json_file)
                 self.number_of_transformers = len(self.charging_network_topology)
