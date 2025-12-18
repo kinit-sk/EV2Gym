@@ -14,5 +14,4 @@ dependencies = [
     "multicopula",
     "numba~=0.61",
     "pyyaml>=6.0.2",
-    "stable-baselines3[extra]>=2.6.0",
 ]
