@@ -18,7 +18,6 @@ random_day: True # True or False
 random_hour: False # True or False
 
 # Simulation Starting Time
-random_hour: False # True or False
 # Hour and minute do not change after the environment has been reset
 hour: 5 # Simulation starting hour (24 hour format)
 minute: 0 # Simulation starting minute (0-59)
