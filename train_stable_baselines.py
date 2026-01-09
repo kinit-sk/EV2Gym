@@ -108,7 +108,7 @@ if __name__ == "__main__":
                     device=device, tensorboard_log="./logs/")
     elif algorithm == "ppo":
         model = PPO("MlpPolicy", env, verbose=1,
-                    device=device, tensorboard_log="./logs/")
+                    device='cpu', tensorboard_log="./logs/")
     elif algorithm == "tqc":
         model = TQC("MlpPolicy", env, verbose=1,
                     device=device, tensorboard_log="./logs/")
