@@ -33,6 +33,9 @@ if __name__ == "__main__":
     device = parser.parse_args().device
     run_name = parser.parse_args().run_name
     config_file = parser.parse_args().config_file
+    
+    ev2gym_package_path = os.getenv('EV2GYM_PACKAGE_PATH')
+    config_file = f"{ev2gym_package_path}/{config_file}"
 
     config = yaml.load(open(config_file, 'r'), Loader=yaml.FullLoader)
 
@@ -40,12 +43,11 @@ if __name__ == "__main__":
         reward_function = profit_maximization
         state_function = V2G_profit_max
         group_name = f'{config["number_of_charging_stations"]}cs_V2GProfitMax'
-
     elif config_file == "ev2gym/example_config_files/PublicPST.yaml":
         reward_function = SquaredTrackingErrorReward
         state_function = PublicPST
         group_name = f'{config["number_of_charging_stations"]}cs_PublicPST'
-    elif config_file == "ev2gym/example_config_files/V2GProfitPlusLoads.yaml":
+    elif config_file == f"{ev2gym_package_path}/ev2gym/example_config_files/V2GProfitPlusLoads.yaml":
         reward_function = ProfitMax_TrPenalty_UserIncentives
         state_function = V2G_profit_max_loads
         group_name = f'{config["number_of_charging_stations"]}cs_V2GProfitPlusLoads'
