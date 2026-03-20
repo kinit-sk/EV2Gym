@@ -28,7 +28,7 @@ def get_statistics(env) -> Dict:
     tracking_error = 0
     energy_tracking_error = 0
     power_tracker_violation = 0
-    for t in range(env.simulation_length):
+    for t in range(env.simulation_length + 1):
         # tracking_error += (min(env.power_setpoints[t], env.charge_power_potential[t]) -
         #                    env.current_power_usage[t])**2
         # energy_tracking_error += abs(min(env.power_setpoints[t], env.charge_power_potential[t]) -
@@ -484,10 +484,10 @@ def EV_spawner(env) -> List[EV]:
 
     ev_list = []
 
-    occupancy_list = np.zeros((env.number_of_ports, env.simulation_length))
+    occupancy_list = np.zeros((env.number_of_ports, env.simulation_length + 1))
 
     arrival_probabilities = np.random.rand(env.number_of_ports,
-                                           env.simulation_length)
+                                           env.simulation_length + 1)
 
     scenario = env.scenario
     user_spawn_multiplier = env.config["spawn_multiplier"]
@@ -567,10 +567,10 @@ def EV_spawner_GF(env) -> List[EV]:
 
     ev_list = []
 
-    occupancy_list = np.zeros((env.number_of_ports, env.simulation_length))
+    occupancy_list = np.zeros((env.number_of_ports, env.simulation_length + 1))
 
     arrival_probabilities = np.random.rand(env.number_of_ports,
-                                           env.simulation_length)
+                                           env.simulation_length + 1)
 
     user_spawn_multiplier = env.config["spawn_multiplier"]
     time = env.sim_date
@@ -673,7 +673,7 @@ def generate_power_setpoints(env) -> np.ndarray:
 
     '''
 
-    power_setpoints = np.zeros(env.simulation_length)
+    power_setpoints = np.zeros(env.simulation_length + 1)
     # get normalized prices
     prices = abs(env.charge_prices[0])
     prices = prices / np.max(prices)
@@ -685,7 +685,7 @@ def generate_power_setpoints(env) -> np.ndarray:
     max_cs_power = env.charging_stations[0].get_max_power()
 
     total_evs_spawned = 0
-    for t in range(env.simulation_length):
+    for t in range(env.simulation_length + 1):
         counter = total_evs_spawned
         for _, ev in enumerate(env.EVs_profiles[counter:]):
             if ev.time_of_arrival == t + 1:
@@ -745,8 +745,8 @@ def generate_power_setpoints(env) -> np.ndarray:
     # if env.timescale < 15:
     #     power_setpoints = median_smoothing(power_setpoints, 5)
     #     # make the setpoint have the same value for 15 minutes
-    #     new_setpoints = np.zeros(env.simulation_length)
-    #     for t in range(env.simulation_length):
+    #     new_setpoints = np.zeros(env.simulation_length + 1)
+    #     for t in range(env.simulation_length + 1):
     #         # average of the setpoints for the next 15 minutes
     #         new_setpoints[t] = np.mean(power_setpoints[t:t+15])
 
@@ -803,56 +803,56 @@ def init_statistic_variables(env):
     env.current_ev_arrived = 0
     env.current_evs_parked = 0
 
-    env.current_power_usage = np.zeros(env.simulation_length)
-    env.saved_grid_energy = np.zeros(env.simulation_length)
-    env.charge_power_potential = np.zeros(env.simulation_length)
+    env.current_power_usage = np.zeros(env.simulation_length + 1)
+    env.saved_grid_energy = np.zeros(env.simulation_length + 1)
+    env.charge_power_potential = np.zeros(env.simulation_length + 1)
 
     if env.simulate_grid:
         env.node_active_power = np.zeros(
-            [env.grid.node_num, env.simulation_length])
+            [env.grid.node_num, env.simulation_length + 1])
         env.node_reactive_power = np.zeros(
-            [env.grid.node_num, env.simulation_length])
+            [env.grid.node_num, env.simulation_length + 1])
         env.node_voltage = np.zeros(
-            [env.grid.node_num, env.simulation_length])
+            [env.grid.node_num, env.simulation_length + 1])
         env.node_ev_power = np.zeros(
-            [env.grid.node_num, env.simulation_length])
+            [env.grid.node_num, env.simulation_length + 1])
 
-    env.cs_power = np.zeros([env.cs, env.simulation_length])
-    env.cs_current = np.zeros([env.cs, env.simulation_length])
+    env.cs_power = np.zeros([env.cs, env.simulation_length + 1])
+    env.cs_current = np.zeros([env.cs, env.simulation_length + 1])
 
     env.tr_overload = np.zeros(
-        [env.number_of_transformers, env.simulation_length])
+        [env.number_of_transformers, env.simulation_length + 1])
 
     env.tr_inflexible_loads = np.zeros(
-        [env.number_of_transformers, env.simulation_length])
+        [env.number_of_transformers, env.simulation_length + 1])
 
     env.tr_solar_power = np.zeros(
-        [env.number_of_transformers, env.simulation_length])
+        [env.number_of_transformers, env.simulation_length + 1])
 
     # env.port_power = np.zeros([env.number_of_ports,
     #                             env.cs,
-    #                             env.simulation_length],
+    #                             env.simulation_length + 1],
     #                            dtype=np.float16)
 
     if not env.lightweight_plots:
         env.port_current = np.zeros([env.number_of_ports,
                                      env.cs,
-                                     env.simulation_length],
+                                     env.simulation_length + 1],
                                     dtype=np.float16,
                                     )
         env.port_current_signal = np.zeros([env.number_of_ports,
                                             env.cs,
-                                            env.simulation_length],
+                                            env.simulation_length + 1],
                                            dtype=np.float16,
                                            )
 
         env.port_energy_level = np.zeros([env.number_of_ports,
                                           env.cs,
-                                          env.simulation_length],
+                                          env.simulation_length + 1],
                                          dtype=np.float16)
         # env.port_charging_cycles = np.zeros([env.number_of_ports,
         #                                       env.cs,
-        #                                       env.simulation_length],
+        #                                       env.simulation_length + 1],
         #                                      dtype=np.float16)
         env.port_arrival = dict({f'{j}.{i}': []
                                  for i in range(env.number_of_ports)

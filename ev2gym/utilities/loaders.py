@@ -98,7 +98,7 @@ def load_power_setpoints(env) -> np.ndarray:
         return env.replay.power_setpoints
     else:
         if not env.config['power_setpoint_enabled']:
-            return np.zeros(env.simulation_length)
+            return np.zeros(env.simulation_length + 1)
         else:
             return generate_power_setpoints(env)
 
@@ -146,7 +146,7 @@ def generate_residential_inflexible_loads(env) -> np.ndarray:
     simulation_index = data[data['date'] == simulation_date].index[0]
 
     # select the data for the simulation date
-    data = data[simulation_index:simulation_index+simulation_length]
+    data = data[simulation_index:simulation_index+simulation_length + 1]
 
     # drop the date column
     data = data.drop(columns=['date'])
@@ -212,7 +212,7 @@ def generate_pv_generation(env) -> np.ndarray:
     simulation_index = data[data['date'] == simulation_date].index[0]
 
     # select the data for the simulation date
-    data = data[simulation_index:simulation_index+simulation_length]
+    data = data[simulation_index:simulation_index+simulation_length + 1]
 
     # drop the date column
     data = data.drop(columns=['date'])
@@ -248,13 +248,13 @@ def load_transformers(env) -> List[Transformer]:
 
     else:
         inflexible_loads = np.zeros((env.number_of_transformers,
-                                    env.simulation_length))
+                                    env.simulation_length + 1))
 
     if env.config['solar_power']['include']:
         solar_power = generate_pv_generation(env)
     else:
         solar_power = np.zeros((env.number_of_transformers,
-                                env.simulation_length))
+                                env.simulation_length + 1))
 
     if env.charging_network_topology:
         # parse the topology file and create the transformers
@@ -424,11 +424,11 @@ def load_electricity_prices(env) -> Tuple[np.ndarray, np.ndarray]:
     # assume prices are the same for all charging stations
 
     data = env.price_data
-    charge_prices = np.zeros((env.cs, env.simulation_length))
-    discharge_prices = np.zeros((env.cs, env.simulation_length))
+    charge_prices = np.zeros((env.cs, env.simulation_length + 1))
+    discharge_prices = np.zeros((env.cs, env.simulation_length + 1))
     # for every simulation step, take the price of the corresponding hour
     sim_temp_date = env.sim_date
-    for i in range(env.simulation_length):
+    for i in range(env.simulation_length + 1):
 
         year = sim_temp_date.year
         month = sim_temp_date.month

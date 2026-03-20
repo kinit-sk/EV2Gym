@@ -40,10 +40,10 @@ class Transformer():
             math.sqrt(env.config['charging_station']['phases'])
         max_current = max_power * 1000 / self.voltage
 
-        self.max_current = np.ones(simulation_length)*max_current
-        self.min_current = np.ones(simulation_length) * -max_current
-        self.max_power = np.ones(simulation_length)*max_power
-        self.min_power = np.ones(simulation_length) * -max_power
+        self.max_current = np.ones(simulation_length + 1)*max_current
+        self.min_current = np.ones(simulation_length + 1) * -max_current
+        self.max_power = np.ones(simulation_length + 1)*max_power
+        self.min_power = np.ones(simulation_length + 1) * -max_power
 
         self.inflexible_load = inflexible_load
         self.solar_power = solar_power

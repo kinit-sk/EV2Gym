@@ -52,7 +52,7 @@ def ev_city_plot(env):
 
     date_range = pd.date_range(start=env.sim_starting_date,
                                end=env.sim_starting_date +
-                               (env.simulation_length - 1) *
+                               env.simulation_length *
                                datetime.timedelta(
                                    minutes=env.timescale),
                                freq=f'{env.timescale}min')

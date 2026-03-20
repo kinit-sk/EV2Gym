@@ -322,9 +322,9 @@ class EV2Gym(gym.Env):
             self.node_reactive_power[1:, self.current_step] = reactive_power
         else:
             self.node_active_power = np.zeros(
-                (34, self.simulation_length))
+                (34, self.simulation_length + 1))
             self.node_reactive_power = np.zeros(
-                (34, self.simulation_length))            
+                (34, self.simulation_length + 1))            
 
         state = self._get_observation()
 
