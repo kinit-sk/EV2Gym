@@ -63,6 +63,8 @@ class EV():
                  charge_efficiency=1, # can be a list of charge efficiencies for different current levels
                  discharge_efficiency=1, # can be a list of discharge efficiencies for different current levels
                  timescale=5,
+                 is_wall_battery=False,
+                 backup_capacity=None,
                  ):
 
         self.id = id
@@ -90,6 +92,9 @@ class EV():
 
         self.charge_efficiency = charge_efficiency
         self.discharge_efficiency = discharge_efficiency
+        self.is_wall_battery = is_wall_battery
+        if backup_capacity is not None:
+            self.backup_capacity = backup_capacity
 
         # EV status
         self.current_capacity = battery_capacity_at_arrival  # kWh
@@ -196,6 +201,9 @@ class EV():
         Outputs:
             - Returns the user satisfaction of the EV in departing else None
         '''
+        if self.is_wall_battery:
+            return None
+
         if timestep < self.time_of_departure:
             return None
 
@@ -207,6 +215,8 @@ class EV():
         Outputs: 
             - Score: a value between 0 and 1
         '''
+        if self.is_wall_battery:
+            return 1.0
 
         if self.current_capacity < self.desired_capacity - 0.001:
             return self.current_capacity / self.desired_capacity

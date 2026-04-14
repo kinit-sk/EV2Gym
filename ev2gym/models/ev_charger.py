@@ -270,7 +270,15 @@ class EV_Charger:
         '''
         assert (self.n_evs_connected < self.n_ports)
 
-        index = self.evs_connected.index(None)
+        preferred = getattr(ev, "preferred_port", None)
+        if preferred is not None:
+            index = int(preferred)
+            assert 0 <= index < self.n_ports
+            assert self.evs_connected[index] is None, (
+                f"Wall battery / preferred port {index} already occupied on CS {self.id}"
+            )
+        else:
+            index = self.evs_connected.index(None)
         ev.id = index
         self.evs_connected[index] = ev
         self.n_evs_connected += 1

@@ -55,11 +55,16 @@ def get_statistics(env) -> Dict:
     battery_degradation = battery_degradation.sum()
 
     total_steps_min_emergency_battery_capacity_violation = 0
-    energy_user_satisfaction = np.zeros((len(env.EVs)))
-    for i, ev in enumerate(env.EVs):
-        e_actual = ev.current_capacity
-        e_max = ev.max_energy_AFAP
-        energy_user_satisfaction[i] = (e_actual / e_max) * 100
+    evs_user_satisfaction = [
+        ev for ev in env.EVs if not getattr(ev, "is_wall_battery", False)
+    ]
+    if evs_user_satisfaction:
+        energy_user_satisfaction = np.array(
+            [(ev.current_capacity / ev.max_energy_AFAP) * 100 for ev in evs_user_satisfaction]
+        )
+    else:
+        energy_user_satisfaction = np.array([0.0])
+    for ev in env.EVs:
         total_steps_min_emergency_battery_capacity_violation += ev.min_emergency_battery_capacity_metric
 
     saved_grid_energy = env.saved_grid_energy.sum()
@@ -89,9 +94,9 @@ def get_statistics(env) -> Dict:
              'power_tracker_violation': power_tracker_violation,
              'tracking_error': tracking_error,
              'energy_tracking_error': energy_tracking_error,
-             'energy_user_satisfaction': np.mean(energy_user_satisfaction),
-             'std_energy_user_satisfaction': np.std(energy_user_satisfaction),
-             'min_energy_user_satisfaction': np.min(energy_user_satisfaction),
+             'energy_user_satisfaction': float(np.mean(energy_user_satisfaction)) if evs_user_satisfaction else 0.0,
+             'std_energy_user_satisfaction': float(np.std(energy_user_satisfaction)) if evs_user_satisfaction else 0.0,
+             'min_energy_user_satisfaction': float(np.min(energy_user_satisfaction)) if evs_user_satisfaction else 0.0,
              'total_steps_min_emergency_battery_capacity_violation': total_steps_min_emergency_battery_capacity_violation,
              'total_transformer_overload': total_transformer_overload,
              'battery_degradation': battery_degradation,
@@ -474,6 +479,117 @@ def spawn_single_EV_GF(env,
                   )
 
 
+def _vfgo_backup_capacity_fraction(env) -> float:
+    """Reads ``vfgo_modeling.backup_capacity_fraction`` with the same default as vfgo.modeling_config."""
+    cfg = getattr(env, "config", None)
+    if not isinstance(cfg, dict):
+        return 0.2
+    section = cfg.get("vfgo_modeling")
+    if isinstance(section, dict) and "backup_capacity_fraction" in section:
+        return float(section["backup_capacity_fraction"])
+    return 0.2
+
+
+def create_wall_battery_ev(env) -> EV:
+    """Synthetic stationary battery modeled as an always-connected EV (see framework / V2H configs)."""
+    wb = env.config.get("wall_battery")
+    if not isinstance(wb, dict) or not wb.get("enabled", False):
+        raise ValueError("create_wall_battery_ev requires config['wall_battery'] with enabled: True")
+
+    required = (
+        "battery_capacity",
+        "max_charge_power",
+        "max_discharge_power",
+        "charge_efficiency",
+        "discharge_efficiency",
+    )
+    for key in required:
+        if key not in wb:
+            raise ValueError(
+                f"wall_battery.{key} is required when wall_battery.enabled is True (got keys: {list(wb.keys())})"
+            )
+
+    cap = float(wb["battery_capacity"])
+    max_ch = float(wb["max_charge_power"])
+    max_dis = float(wb["max_discharge_power"])
+    if max_dis > 0:
+        max_dis = -max_dis
+
+    if "_resolved_charging_station_id" not in wb or "_resolved_port" not in wb:
+        raise ValueError(
+            "wall_battery internal placement is not resolved. "
+            "Expected _resolved_charging_station_id/_resolved_port to be set by EV2Gym."
+        )
+    cs_id = int(wb["_resolved_charging_station_id"])
+    port = int(wb["_resolved_port"])
+    if cs_id < 0 or cs_id >= env.cs:
+        raise ValueError(f"wall_battery.charging_station_id must be in [0, {env.cs - 1}], got {cs_id}")
+    if port < 0 or port >= env.charging_stations[cs_id].n_ports:
+        raise ValueError(
+            f"wall_battery.port must be in [0, {env.charging_stations[cs_id].n_ports - 1}], got {port}"
+        )
+
+    initial_soc = float(wb.get("initial_soc_fraction", 0.5))
+    if not 0.0 <= initial_soc <= 1.0:
+        raise ValueError("wall_battery.initial_soc_fraction must be in [0, 1]")
+
+    battery_at_arrival = initial_soc * cap
+    backup_frac = _vfgo_backup_capacity_fraction(env)
+    backup_kwh = float(wb.get("backup_capacity_kwh", backup_frac * cap))
+    min_floor = float(wb.get("min_battery_capacity_kwh", 0.0))
+    min_emergency = float(wb.get("min_emergency_battery_capacity_kwh", backup_kwh))
+
+    ev_cfg = env.config["ev"]
+    min_ac = float(wb.get("min_ac_charge_power", ev_cfg.get("min_ac_charge_power", 0.0)))
+    min_dc = float(wb.get("min_discharge_power", ev_cfg.get("min_discharge_power", 0.0)))
+    transition_soc = float(wb.get("transition_soc", 1.0))
+    tsm = float(wb.get("transition_soc_multiplier", ev_cfg.get("transition_soc_multiplier", 1)))
+    ev_phases = int(wb.get("ev_phases", ev_cfg.get("ev_phases", 1)))
+
+    ev = EV(
+        id=port,
+        location=cs_id,
+        battery_capacity_at_arrival=battery_at_arrival,
+        battery_capacity=cap,
+        desired_capacity=cap,
+        min_battery_capacity=min_floor,
+        min_emergency_battery_capacity=min_emergency,
+        max_ac_charge_power=max_ch,
+        min_ac_charge_power=min_ac,
+        max_dc_charge_power=float(wb.get("max_dc_charge_power", ev_cfg.get("max_dc_charge_power", 50))),
+        max_discharge_power=max_dis,
+        min_discharge_power=min_dc,
+        time_of_arrival=1,
+        time_of_departure=env.simulation_length,
+        ev_phases=ev_phases,
+        transition_soc=transition_soc,
+        transition_soc_multiplier=tsm,
+        charge_efficiency=float(wb["charge_efficiency"]),
+        discharge_efficiency=float(wb["discharge_efficiency"]),
+        timescale=env.timescale,
+        is_wall_battery=True,
+        backup_capacity=backup_kwh,
+    )
+    ev.preferred_port = port
+    return ev
+
+
+def _reserve_wall_battery_port_for_spawn_schedule(env, occupancy_list: np.ndarray) -> None:
+    """Block random EV spawns on the port used by synthetic wall battery (see create_wall_battery_ev)."""
+    wb = env.config.get("wall_battery")
+    if not isinstance(wb, dict) or not wb.get("enabled", False):
+        return
+    cs_id = int(wb["_resolved_charging_station_id"])
+    port = int(wb["_resolved_port"])
+    counter = 0
+    for cs in env.charging_stations:
+        for p in range(cs.n_ports):
+            if cs.id == cs_id and p == port:
+                occupancy_list[counter, :] = 1
+                return
+            counter += 1
+
+
 def EV_spawner(env) -> List[EV]:
     '''
     This function spawns all the EVs of the current simulation and returns the list of EVs
@@ -485,6 +601,7 @@ def EV_spawner(env) -> List[EV]:
     ev_list = []
 
     occupancy_list = np.zeros((env.number_of_ports, env.simulation_length))
+    _reserve_wall_battery_port_for_spawn_schedule(env, occupancy_list)
 
     arrival_probabilities = np.random.rand(env.number_of_ports,
                                            env.simulation_length)
@@ -528,7 +645,8 @@ def EV_spawner(env) -> List[EV]:
                 multiplier = 1  # 6
 
         counter = 0
-        for cs in env.charging_stations:
+        ev_cs_count = int(getattr(env, "ev_cs_count", len(env.charging_stations)))
+        for cs in env.charging_stations[:ev_cs_count]:
             for port in range(cs.n_ports):
                 # if port is empty
                 if occupancy_list[counter, t] == 0 and \
@@ -568,6 +686,7 @@ def EV_spawner_GF(env) -> List[EV]:
     ev_list = []
 
     occupancy_list = np.zeros((env.number_of_ports, env.simulation_length))
+    _reserve_wall_battery_port_for_spawn_schedule(env, occupancy_list)
 
     arrival_probabilities = np.random.rand(env.number_of_ports,
                                            env.simulation_length)
@@ -594,7 +713,8 @@ def EV_spawner_GF(env) -> List[EV]:
         multiplier = 0.5
 
         counter = 0
-        for cs in env.charging_stations:
+        ev_cs_count = int(getattr(env, "ev_cs_count", len(env.charging_stations)))
+        for cs in env.charging_stations[:ev_cs_count]:
             for port in range(cs.n_ports):
                 # if port is empty
                 if occupancy_list[counter, t] == 0 and \

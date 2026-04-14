@@ -15,7 +15,12 @@ from ev2gym.models.ev import EV
 from ev2gym.models.transformer import Transformer
 from ev2gym.models.grid import PowerGrid
 
-from ev2gym.utilities.utils import EV_spawner, generate_power_setpoints, EV_spawner_GF
+from ev2gym.utilities.utils import (
+    EV_spawner,
+    EV_spawner_GF,
+    create_wall_battery_ev,
+    generate_power_setpoints,
+)
 
 
 def load_ev_spawn_scenarios(env) -> None:
@@ -376,13 +381,22 @@ def load_ev_profiles(env) -> List[EV]:
 
         if env.scenario == 'GF':
             ev_profiles = EV_spawner_GF(env)
-            while len(ev_profiles) == 0:
+            max_spawn_attempts = 100
+            attempts = 0
+            while len(ev_profiles) == 0 and attempts < max_spawn_attempts:
                 ev_profiles = EV_spawner_GF(env)
-            return ev_profiles
-
-        ev_profiles = EV_spawner(env)
-        while len(ev_profiles) == 0:
+                attempts += 1
+        else:
             ev_profiles = EV_spawner(env)
+            max_spawn_attempts = 100
+            attempts = 0
+            while len(ev_profiles) == 0 and attempts < max_spawn_attempts:
+                ev_profiles = EV_spawner(env)
+                attempts += 1
+
+        wb = env.config.get("wall_battery")
+        if isinstance(wb, dict) and wb.get("enabled", False):
+            ev_profiles = [create_wall_battery_ev(env)] + ev_profiles
 
         return ev_profiles
     else:

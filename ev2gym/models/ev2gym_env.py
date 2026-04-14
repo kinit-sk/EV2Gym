@@ -63,6 +63,7 @@ class EV2Gym(gym.Env):
         # read yaml config file
         assert config_file is not None, "Please provide a config file!!!"
         self.config = yaml.load(open(config_file, 'r'), Loader=yaml.FullLoader)
+        self._normalize_wall_battery_capacity_config()
 
         self.generate_rnd_game = generate_rnd_game
         self.load_from_replay_path = load_from_replay_path
@@ -114,10 +115,14 @@ class EV2Gym(gym.Env):
             self.scenario = self.replay.scenario
             self.heterogeneous_specs = self.replay.heterogeneous_specs
             self.simulate_grid = self.replay.simulate_grid
+            self.ev_cs_count = self.cs
 
         else:
             assert cs is not None, "Please provide the number of charging stations"
             self.cs = cs  # Number of charging stations
+            self.ev_cs_count = int(
+                self.config.get("_ev_cs_count_config", self.cs)
+            )
             # Threshold for the user satisfaction score
 
             self.number_of_ports_per_cs = self.config['number_of_ports_per_cs']
@@ -196,7 +201,6 @@ class EV2Gym(gym.Env):
 
         # Instatiate Charging Stations
         self.charging_stations = load_ev_charger_profiles(self)
-
         # Calculate the total number of ports in the simulation
         self.number_of_ports = np.array(
             [cs.n_ports for cs in self.charging_stations]).sum()
@@ -239,6 +243,26 @@ class EV2Gym(gym.Env):
 
         # Observation mask: is a vector of size ("Sum of all ports of all charging stations") showing in which ports an EV is connected
         self.observation_mask = np.zeros(self.number_of_ports)
+
+    def _normalize_wall_battery_capacity_config(self) -> None:
+        """Reserve configured charging stations for EVs and dedicate one extra station to wall battery."""
+        wb = self.config.get("wall_battery")
+        if not isinstance(wb, dict) or not wb.get("enabled", False):
+            return
+
+        n_cs = int(self.config.get("number_of_charging_stations", 0))
+        n_ports = int(self.config.get("number_of_ports_per_cs", 0))
+        if n_cs <= 0 or n_ports <= 0:
+            return
+
+        # Keep config station count as EV capacity semantics; append one dedicated station internally.
+        self.config["_ev_cs_count_config"] = n_cs
+        self.config["number_of_charging_stations"] = n_cs + 1
+
+        # Clean convention: wall battery always lives on a dedicated extra station.
+        # User-facing charging_station_id / port are intentionally ignored when enabled.
+        wb["_resolved_charging_station_id"] = n_cs
+        wb["_resolved_port"] = 0
 
     def reset(self, seed=None, options=None, **kwargs):
         '''Resets the environment to its initial state'''
