@@ -88,7 +88,19 @@ def ev_city_plot(env):
                    datetime.timedelta(minutes=env.timescale)] = df.iloc[-1]
 
             for port in range(cs.n_ports):
-                for i, (t_arr, t_dep) in enumerate(env.port_arrival[f'{cs.id}.{port}']):
+                arrivals = list(env.port_arrival[f'{cs.id}.{port}'])
+                wall_battery_windows = [
+                    (int(ev.time_of_arrival), int(ev.time_of_departure))
+                    for ev in getattr(env, "EVs_profiles", [])
+                    if getattr(ev, "is_wall_battery", False)
+                    and int(getattr(ev, "location", -1)) == cs.id
+                    and int(getattr(ev, "id", -1)) == port
+                ]
+                for window in wall_battery_windows:
+                    if window not in arrivals:
+                        arrivals.append(window)
+
+                for i, (t_arr, t_dep) in enumerate(arrivals):
                     t_dep = t_dep + 1
                     if t_dep > len(df):
                         t_dep = len(df)
@@ -103,7 +115,11 @@ def ev_city_plot(env):
                                      y,
                                      step='post',
                                      alpha=0.7,
-                                     label=f'EV {i}, Port {port}')
+                                     label=(
+                                         f'Wall Battery, Port {port}'
+                                         if (t_arr, t_dep - 1) in wall_battery_windows
+                                         else f'EV {i}, Port {port}'
+                                     ))
 
             plt.title(f'Charging Station {cs.id}', fontsize=24)
             plt.xlabel(f'Time', fontsize=24)
@@ -161,18 +177,20 @@ def ev_city_plot(env):
             df = pd.DataFrame([],
                               index=date_range)
 
-            colors = plt.cm.gist_earth(np.linspace(0.1, 0.8, len(tr.cs_ids)+1))
+            colors = plt.cm.gist_earth(np.linspace(0.1, 0.8, len(tr.cs_ids)))
 
             if env.config['inflexible_loads']['include']:
                 df['inflexible'] = env.tr_inflexible_loads[tr.id, :] * \
                     1000 / tr.voltage
-                blue = np.array([0.529, 0.808, 0.922, 1])
-                colors = np.insert(colors, 0, blue, axis=0)
 
             if env.config['solar_power']['include']:
                 df['solar'] = env.tr_solar_power[tr.id, :] * 1000 / tr.voltage
                 gold = np.array([1, 0.843, 0, 1])
                 colors = np.insert(colors, 0, gold, axis=0)
+
+            if env.config['inflexible_loads']['include']:
+                light_blue = np.array([0.529, 0.808, 0.922, 1])
+                colors = np.insert(colors, 0, light_blue, axis=0)
 
             for cs in tr.cs_ids:
                 df[cs] = env.cs_current[cs, :]
@@ -225,13 +243,14 @@ def ev_city_plot(env):
             plt.xticks(ticks=date_range_print,
                        labels=[f'{d.hour:2d}:{d.minute:02d}' for d in date_range_print], rotation=45)
             if len(tr.cs_ids) < 4:
+                legend_list = [f'CS {i}' for i in tr.cs_ids] + [
+                    'Circuit Breaker Limit (A)', 'Total Current (A)'
+                ]
+                if env.config['solar_power']['include']:
+                    legend_list = ['Solar Power'] + legend_list
                 if env.config['inflexible_loads']['include']:
-                    plt.legend(['Inflexible Loads'] +
-                               [f'CS {i}' for i in tr.cs_ids] +
-                               ['Circuit Breaker Limit (A)', 'Total Current (A)'])
-                else:
-                    plt.legend([f'CS {i}' for i in tr.cs_ids] +
-                               ['Circuit Breaker Limit (A)', 'Total Current (A)'])
+                    legend_list = ['Inflexible Loads'] + legend_list
+                plt.legend(legend_list)
             plt.grid(True, which='minor', axis='both')
             counter += 1
 
