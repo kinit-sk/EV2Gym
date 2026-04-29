@@ -1,8 +1,8 @@
 '''
 This file contains the Transformer class which is used to model the transformer in the ev_city environment
 '''
-import numpy as np
 import math
+import numpy as np
 
 
 class Transformer():
@@ -76,6 +76,17 @@ class Transformer():
                                                     self.max_power)
         else:
             self.dr_events = []
+
+    @staticmethod
+    def _get_forecast_mode(env, section_name: str) -> str:
+        """
+        Read forecast mode from config while staying backward compatible.
+        """
+        section = env.config.get(section_name, {})
+        mode = str(section.get('forecast_mode', 'noisy')).strip().lower()
+        if mode not in {'noisy', 'perfect'}:
+            mode = 'noisy'
+        return mode
 
     def generate_demand_response_events(self, env) -> None:
         '''
@@ -201,6 +212,11 @@ class Transformer():
         '''
         This function is used to generate pv generation forecast using the configuration file
         '''
+        forecast_mode = self._get_forecast_mode(env, 'solar_power')
+        if forecast_mode == 'perfect':
+            self.pv_generation_forecast = self.solar_power.copy()
+            return
+
         forecast_uncertainty_mean = env.config['solar_power']['forecast_mean'] / 100 * \
             self.solar_power
 
@@ -239,6 +255,14 @@ class Transformer():
         '''
         This function is used to generate inflexible loads forecast using the configuration file
         '''
+        forecast_mode = self._get_forecast_mode(env, 'inflexible_loads')
+        if forecast_mode == 'perfect':
+            self.inflexible_load_forecast = self.inflexible_load.copy()
+            self.inflexible_load_forecast = np.clip(self.inflexible_load_forecast,
+                                                    self.min_power,
+                                                    self.max_power)
+            return
+
         forecast_uncertainty_mean = env.config['inflexible_loads']['forecast_mean'] / 100 * \
             self.inflexible_load
 
