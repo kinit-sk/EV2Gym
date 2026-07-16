@@ -22,6 +22,18 @@ from ev2gym.utilities.utils import (
     generate_power_setpoints,
 )
 
+# Module-level cache for static CSV files that do not change between resets.
+# Keyed by (resolved file path, frozen read_csv kwargs). Returns a copy so that
+# callers performing in-place mutations cannot corrupt the cached frame.
+_csv_cache = {}
+
+
+def _read_csv_cached(file_path, **kwargs):
+    key = (file_path, tuple(sorted(kwargs.items())))
+    if key not in _csv_cache:
+        _csv_cache[key] = pd.read_csv(file_path, **kwargs)
+    return _csv_cache[key].copy()
+
 
 def load_ev_spawn_scenarios(env) -> None:
     """Loads the EV spawn scenarios of the simulation"""
@@ -119,7 +131,7 @@ def generate_residential_inflexible_loads(env) -> np.ndarray:
 
     # Load the data
     data_path = pkg_resources.resource_filename("ev2gym", "data/residential_loads.csv")
-    data = pd.read_csv(data_path, header=None)
+    data = _read_csv_cached(data_path, header=None)
 
     desired_timescale = env.timescale
     simulation_length = env.simulation_length
@@ -175,7 +187,7 @@ def generate_pv_generation(env) -> np.ndarray:
 
     # Load the data
     data_path = pkg_resources.resource_filename("ev2gym", "data/pv_netherlands.csv")
-    data = pd.read_csv(data_path, sep=",", header=0)
+    data = _read_csv_cached(data_path, sep=",", header=0)
     data.drop(["time", "local_time"], inplace=True, axis=1)
 
     desired_timescale = env.timescale
@@ -437,10 +449,35 @@ def load_electricity_prices(env) -> Tuple[np.ndarray, np.ndarray]:
         env.price_data["day"] = pd.DatetimeIndex(env.price_data["Datetime (UTC)"]).day
         env.price_data["hour"] = pd.DatetimeIndex(env.price_data["Datetime (UTC)"]).hour
 
+        # invalidate any stale lookup index when the price data is (re)loaded
+        env._price_index = None
+
     # assume charge and discharge prices are the same
     # assume prices are the same for all charging stations
 
     data = env.price_data
+    # Build an O(1) (year, month, day, hour) -> price lookup once, cached on the
+    # env so it is not rebuilt every reset. Keep the first occurrence per key to
+    # match the original ".loc[...].iloc[0]" semantics.
+    price_index = getattr(env, "_price_index", None)
+    if price_index is None:
+        price_index = {}
+        # rows with NaT datetimes have NaN keys and never matched the original
+        # boolean mask, so skip them to preserve identical behavior.
+        valid = data[["year", "month", "day", "hour"]].notna().all(axis=1)
+        sub = data[valid]
+        for year, month, day, hour, price in zip(
+            sub["year"].to_numpy(dtype=int),
+            sub["month"].to_numpy(dtype=int),
+            sub["day"].to_numpy(dtype=int),
+            sub["hour"].to_numpy(dtype=int),
+            sub["Price (EUR/MWhe)"].to_numpy(),
+        ):
+            key = (year, month, day, hour)
+            if key not in price_index:
+                price_index[key] = price
+        env._price_index = price_index
+
     charge_prices = np.zeros((env.cs, env.simulation_length))
     discharge_prices = np.zeros((env.cs, env.simulation_length))
     # for every simulation step, take the price of the corresponding hour
@@ -452,53 +489,18 @@ def load_electricity_prices(env) -> Tuple[np.ndarray, np.ndarray]:
         hour = sim_temp_date.hour
         # find the corresponding price
         try:
-            charge_prices[:, i] = (
-                -data.loc[
-                    (data["year"] == year)
-                    & (data["month"] == month)
-                    & (data["day"] == day)
-                    & (data["hour"] == hour),
-                    "Price (EUR/MWhe)",
-                ].iloc[0]
-                / 1000
-            )  # €/kWh
-            discharge_prices[:, i] = (
-                data.loc[
-                    (data["year"] == year)
-                    & (data["month"] == month)
-                    & (data["day"] == day)
-                    & (data["hour"] == hour),
-                    "Price (EUR/MWhe)",
-                ].iloc[0]
-                / 1000
-            )  # €/kWh
-        except:
+            price = price_index[(year, month, day, hour)]
+        except KeyError:
             print("Error: no price found for the given date and hour. Using 2022 prices instead.")
 
             year = 2022
             if day > 28:
                 day -= 1
             # print("Debug:", year, month, day, hour)
-            charge_prices[:, i] = (
-                -data.loc[
-                    (data["year"] == year)
-                    & (data["month"] == month)
-                    & (data["day"] == day)
-                    & (data["hour"] == hour),
-                    "Price (EUR/MWhe)",
-                ].iloc[0]
-                / 1000
-            )  # €/kWh
-            discharge_prices[:, i] = (
-                data.loc[
-                    (data["year"] == year)
-                    & (data["month"] == month)
-                    & (data["day"] == day)
-                    & (data["hour"] == hour),
-                    "Price (EUR/MWhe)",
-                ].iloc[0]
-                / 1000
-            )  # €/kWh
+            price = price_index[(year, month, day, hour)]
+
+        charge_prices[:, i] = -price / 1000  # €/kWh
+        discharge_prices[:, i] = price / 1000  # €/kWh
 
         # step to next
         sim_temp_date = sim_temp_date + datetime.timedelta(minutes=env.timescale)
@@ -550,7 +552,7 @@ def load_grid(env):
 def load_pv_profiles(env) -> np.ndarray:
     # Load the data
     data_path = pkg_resources.resource_filename("ev2gym", "data/pv_netherlands.csv")
-    data = pd.read_csv(data_path, sep=",", header=0)
+    data = _read_csv_cached(data_path, sep=",", header=0)
     data.drop(["time", "local_time"], inplace=True, axis=1)
 
     desired_timescale = env.timescale
